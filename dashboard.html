@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Parking System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-image: url('images/image.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: -1;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-black">
+
+  <!-- Header -->
+  <header class="bg-gray-900 text-white text-2xl font-bold px-6 py-4 flex justify-between items-center">
+    <span>Smart Parking System</span>
+    <button onclick="logout()" class="text-sm bg-red-500 hover:bg-red-700 px-4 py-1 rounded">
+      Logout
+    </button>
+  </header>
+
+  <!-- Main Content -->
+  <div class="flex flex-col md:flex-row p-8 space-y-6 md:space-y-0 md:space-x-6">
+
+    <!-- Left Column -->
+    <div class="flex flex-col space-y-6 w-full md:w-1/3">
+      <!-- Available Spots -->
+      <div class="bg-white shadow-lg rounded-lg p-6">
+        <h2 class="text-xl font-bold text-center mb-4">Available Parking Spots</h2>
+        <div id="parkingGrid" class="grid grid-cols-4 gap-3 justify-center"></div>
+      </div>
+
+      <!-- Reserve Form -->
+      <div class="bg-white shadow-lg rounded-lg p-6">
+        <h2 class="text-xl font-bold text-center mb-4">Reserve Your Spot</h2>
+        <form id="reserveForm">
+          <label class="block mb-2 text-sm font-semibold">Vehicle Number</label>
+          <input type="text" id="vehicleNumber" class="w-full border border-gray-300 rounded px-3 py-2 mb-4" placeholder="Enter vehicle number" required />
+
+          <label class="block mb-2 text-sm font-semibold">Parking Spot (Number)</label>
+          <input type="number" id="spotNumber" class="w-full border border-gray-300 rounded px-3 py-2 mb-4" placeholder="e.g. 4" min="1" max="20" required />
+
+          <label class="block mb-2 text-sm font-semibold">Number of Hours</label>
+          <input type="number" id="numHours" class="w-full border border-gray-300 rounded px-3 py-2 mb-4" placeholder="e.g. 2" min="1" required />
+
+          <button type="submit" class="bg-gray-800 text-white py-2 w-full rounded hover:bg-gray-700">Reserve Spot</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right Column -->
+    <div class="flex-1 flex flex-col space-y-6">
+
+      <!-- Reserved Spots -->
+      <div class="bg-white shadow-lg rounded-lg p-6 text-center">
+        <h2 class="text-xl font-bold mb-4">Your Reserved Parking Spots</h2>
+        <ul id="reservedSpotsList" class="space-y-3"></ul>
+      </div>
+
+      <!-- Previous Reservations -->
+      <div class="bg-white shadow-lg rounded-lg p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-center">Previous Reservations</h2>
+          <button onclick="clearHistory()" class="bg-red-500 text-white text-sm px-3 py-1 rounded hover:bg-red-700">Clear History</button>
+        </div>
+        <ul id="previousSpotsList" class="space-y-2 text-center text-gray-500 italic"></ul>
+      </div>
+
+      <!-- Payment Button -->
+      <div class="flex justify-center mb-4">
+        <button onclick="makePayment()" class="bg-green-600 text-white px-6 py-3 rounded shadow-lg hover:bg-green-700">
+          Make Payment
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    const parkingGrid = document.getElementById("parkingGrid");
+    const reserveForm = document.getElementById("reserveForm");
+    const vehicleNumberInput = document.getElementById("vehicleNumber");
+    const spotNumberInput = document.getElementById("spotNumber");
+    const numHoursInput = document.getElementById("numHours");
+    const reservedSpotsList = document.getElementById("reservedSpotsList");
+    const previousSpotsList = document.getElementById("previousSpotsList");
+
+    let reservedSpots = JSON.parse(localStorage.getItem("reservedSpots")) || {};
+    let previousReservations = JSON.parse(localStorage.getItem("previousReservations")) || [];
+
+    function renderParkingGrid() {
+      parkingGrid.innerHTML = "";
+      for (let i = 1; i <= 20; i++) {
+        const spot = document.createElement("div");
+        spot.className = "text-white text-sm py-2 text-center rounded-md cursor-pointer";
+        spot.textContent = `Spot ${i}`;
+        if (reservedSpots[`Spot ${i}`]) {
+          spot.classList.add("bg-red-600");
+        } else {
+          spot.classList.add("bg-green-600");
+        }
+        spot.onclick = () => {
+          spotNumberInput.value = i;
+        };
+        parkingGrid.appendChild(spot);
+      }
+    }
+
+    function renderReservedList() {
+      reservedSpotsList.innerHTML = "";
+      for (const spot in reservedSpots) {
+        const { vehicle, time, hours } = reservedSpots[spot];
+        const li = document.createElement("li");
+        li.className = "flex justify-between items-center bg-red-600 text-white p-3 rounded shadow-md transition-all duration-300 ease-in-out transform hover:scale-105";
+        li.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <i data-lucide="car" class="w-5 h-5"></i>
+            <div class="flex flex-col text-left">
+              <span class="font-bold text-lg">${spot}</span>
+              <span class="text-sm">${vehicle}</span>
+              <div class="flex items-center text-xs gap-1">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+                <span>${time} | ${hours} hour(s)</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="cancelReservation('${spot}')" class="bg-white text-red-600 text-xs px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1">
+            <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel
+          </button>
+        `;
+        reservedSpotsList.appendChild(li);
+      }
+      lucide.createIcons(); // Load icons after rendering
+    }
+
+    function renderPreviousList() {
+      previousSpotsList.innerHTML = "";
+      if (previousReservations.length === 0) {
+        previousSpotsList.innerHTML = "<p>No previous reservations yet.</p>";
+      } else {
+        previousReservations.forEach(item => {
+          const li = document.createElement("li");
+          li.textContent = `${item.spot} - ${item.vehicle} at ${item.time} for ${item.hours} hour(s)`;
+          previousSpotsList.appendChild(li);
+        });
+      }
+    }
+
+    reserveForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const vehicle = vehicleNumberInput.value.trim();
+      const spotNumber = parseInt(spotNumberInput.value.trim());
+      const hours = parseInt(numHoursInput.value.trim());
+      const spotKey = `Spot ${spotNumber}`;
+
+      if (!vehicle || isNaN(spotNumber) || isNaN(hours) || spotNumber < 1 || spotNumber > 20 || hours < 1) {
+        alert("Please enter valid data.");
+        return;
+      }
+
+      if (reservedSpots[spotKey]) {
+        alert("This spot is already reserved!");
+        return;
+      }
+
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+
+      reservedSpots[spotKey] = { vehicle, time, hours };
+      previousReservations.push({ spot: spotKey, vehicle, time, hours });
+
+      localStorage.setItem("reservedSpots", JSON.stringify(reservedSpots));
+      localStorage.setItem("previousReservations", JSON.stringify(previousReservations));
+
+      renderParkingGrid();
+      renderReservedList();
+      renderPreviousList();
+
+      reserveForm.reset();
+    });
+
+    function cancelReservation(spot) {
+      delete reservedSpots[spot];
+      localStorage.setItem("reservedSpots", JSON.stringify(reservedSpots));
+      renderParkingGrid();
+      renderReservedList();
+    }
+
+    function clearHistory() {
+      if (confirm("Are you sure you want to clear all previous reservations?")) {
+        previousReservations = [];
+        localStorage.setItem("previousReservations", JSON.stringify(previousReservations));
+        renderPreviousList();
+      }
+    }
+
+    function logout() {
+      alert("You have been logged out.");
+      window.location.href = "index.html";
+    }
+
+    function makePayment() {
+      // Get the total amount to be paid
+      const numHours = parseInt(document.getElementById("numHours").value);
+      const amount = numHours * 100; // ₹100 per hour
+
+      // Razorpay payment options
+      var options = {
+        "key": "rzp_test_yQ8sKvUS72HreR", // Your Razorpay key
+        "amount": amount * 100, // Convert to paise
+        "currency": "INR",
+        "name": "Smart Parking System",
+        "description": "Parking Spot Reservation",
+        "image": "https://example.com/your-logo.png", // Replace with your logo
+        "handler": function(response) {
+          alert("Payment successful! Payment ID: " + response.razorpay_payment_id);
+        },
+        "prefill": {
+          "name": "John Doe",
+          "email": "john@example.com",
+          "contact": "1234567899"
+        },
+        "theme": {
+          "color": "#F37254"
+        }
+      };
+
+      var rzp = new Razorpay(options);
+      rzp.open();
+    }
+
+    // Initialize
+    renderParkingGrid();
+    renderReservedList();
+    renderPreviousList();
+  </script>
+</body>
+</html>
